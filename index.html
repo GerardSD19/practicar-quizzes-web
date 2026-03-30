@@ -214,13 +214,25 @@ textarea.inp{resize:vertical;min-height:80px}
 </head>
 <body>
 
+<!-- LOGIN -->
+<div id="screen-login" class="screen">
+  <div style="max-width:400px;margin:100px auto;padding:40px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);text-align:center;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">
+    <div style="margin-bottom:24px;font-size:2rem;font-weight:700;letter-spacing:-0.03em">Cloud Sync</div>
+    <input type="email" id="log-em" class="inp" placeholder="Correo electrónico" style="margin-bottom:12px">
+    <input type="password" id="log-pw" class="inp" placeholder="Contraseña" style="margin-bottom:20px">
+    <button id="btn-login" class="btn btn-p" style="width:100%;padding:12px;margin-bottom:12px">Entrar</button>
+    <button id="btn-register" class="btn btn-g" style="width:100%;padding:12px">Registrarse</button>
+    <div id="log-err" style="color:var(--err);font-size:0.8rem;margin-top:16px;display:none"></div>
+  </div>
+</div>
+
 <!-- HOME -->
-<div id="screen-home" class="screen active">
+<div id="screen-home" class="screen">
 <div class="hw">
   <header class="hh">
     <div class="lg">
       <div class="li"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path></svg></div>
-      <div><div class="lt">Practicador de Quizzes</div><div class="ls">GERARD · MODO ESTUDIO</div></div>
+      <div><div class="lt">Practicador de Quizzes</div><div class="ls" id="user-em-txt">Cargando...</div></div>
     </div>
     <div class="ha">
       <button class="btn btn-g btn-sm theme-toggle" title="Cambiar tema">
@@ -228,7 +240,7 @@ textarea.inp{resize:vertical;min-height:80px}
         <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
       <button id="btn-manage" class="btn btn-g"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Gestionar</button>
-      <button id="btn-nuke" class="btn btn-d btn-sm">Reset</button>
+      <button id="btn-logout" class="btn btn-d btn-sm">Cerrar Sesión</button>
     </div>
   </header>
   <div id="home-list" class="hg"></div>
@@ -363,26 +375,62 @@ textarea.inp{resize:vertical;min-height:80px}
 </div>
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 'use strict';
+
+/* ─── FIREBASE ──────────────────────────────────── */
+const firebaseConfig = {
+  apiKey: "AIzaSyCqCIwinFvtD254el-MfEqPmGWCXhhS2D4",
+  authDomain: "tests-3e201.firebaseapp.com",
+  projectId: "tests-3e201",
+  storageBucket: "tests-3e201.firebasestorage.app",
+  messagingSenderId: "73149253046",
+  appId: "1:73149253046:web:618f24c509fd0387b8ad17"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const fdb = getFirestore(fbApp);
 
 /* ─── DATA ─────────────────────────────────────── */
 const DM = {
-  key:'DB_QUIZ_V29', db:{},
-  init(){ const r=localStorage.getItem(this.key); if(r){try{this.db=JSON.parse(r)}catch(e){this.db={}}} },
-  save(){ localStorage.setItem(this.key,JSON.stringify(this.db)) },
-  createCat(n){ if(!n||this.db[n])return; this.db[n]=[]; this.save() },
-  renameCat(o,n){ if(!n||this.db[n])return false; this.db[n]=this.db[o]; delete this.db[o]; const s=localStorage.getItem('S_'+o); if(s){localStorage.setItem('S_'+n,s);localStorage.removeItem('S_'+o)} this.save(); return true },
-  exportCat(n){ const b=new Blob([JSON.stringify(this.db[n]||[],null,2)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=n+'.txt'; a.click() },
-  deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; localStorage.removeItem('S_'+n); this.save(); Ed.renderCats() },
-  importJSON(t,j){
+  db:{}, sessions:{}, uid:null,
+  async loadData(){
+    this.db={};
+    const snap=await getDocs(collection(fdb,'categories'));
+    snap.forEach(d=>{ this.db[d.id]=d.data().questions||[] });
+  },
+  async loadSessions(){
+    this.sessions={};
+    if(!this.uid)return;
+    const snap=await getDocs(collection(fdb,'users',this.uid,'sessions'));
+    snap.forEach(d=>{ this.sessions[d.id]=d.data() });
+  },
+  async createCat(n){ if(!n||this.db[n])return; this.db[n]=[]; await this.saveCat(n) },
+  async renameCat(o,n){
+    if(!n||this.db[n])return false;
+    this.db[n]=this.db[o]; delete this.db[o];
+    const sess=this.sessions[o];
+    if(sess){this.sessions[n]=sess;delete this.sessions[o];await setDoc(doc(fdb,'users',this.uid,'sessions',n),sess);await deleteDoc(doc(fdb,'users',this.uid,'sessions',o))}
+    await setDoc(doc(fdb,'categories',n),{questions:this.db[n]});
+    await deleteDoc(doc(fdb,'categories',o));
+    return true
+  },
+  exportCat(n){ const bl=new Blob([JSON.stringify(this.db[n]||[],null,2)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=n+'.txt'; a.click() },
+  async deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; await deleteDoc(doc(fdb,'categories',n)); await this.rmSession(n); Ed.renderCats() },
+  async importJSON(t,j){
     try{ const d=JSON.parse(j);
-      if(t==='__AUTO__'&&Array.isArray(d))d.forEach(x=>{if(x.cat)DM.db[x.cat]=x.data});
-      else if(DM.db[t])DM.db[t]=DM.db[t].concat(d);
-      this.save(); return true
+      if(t==='__AUTO__'&&Array.isArray(d)){for(const x of d){if(x.cat){DM.db[x.cat]=x.data;await DM.saveCat(x.cat)}}}
+      else if(DM.db[t]){DM.db[t]=DM.db[t].concat(d);await DM.saveCat(t)}
+      return true
     }catch(e){alert('Error JSON');return false}
   },
-  nuke(){ if(!confirm('¿Reset total?'))return; localStorage.clear(); location.reload() },
+  async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[]}) },
+  async saveSession(n,data){ this.sessions[n]=data; if(!this.uid)return; await setDoc(doc(fdb,'users',this.uid,'sessions',n),data) },
+  async rmSession(n){ delete this.sessions[n]; if(!this.uid)return; await deleteDoc(doc(fdb,'users',this.uid,'sessions',n)) },
+  nuke(){ if(!confirm('¿Reset total?'))return; location.reload() },
   cats(){ return Object.keys(this.db) }
 };
 
@@ -395,15 +443,14 @@ const QE = {
   start(c){
     if(!DM.db[c]?.length){alert('Categoría vacía');return}
     this.currCat=c;
-    const s=localStorage.getItem('S_'+c);
-    if(s){try{const d=JSON.parse(s);if(d.v===2){this._restoreSession(d);App.showScreen('screen-quiz');this.render();return}}catch(e){}}
+    const s = DM.sessions[c];
+    if(s && s.v===2){this._restoreSession(s);App.showScreen('screen-quiz');this.render();return}
     this._build(c); App.showScreen('screen-quiz'); this.render()
   },
 
   _build(c){
     this.allQ=DM.db[c].map((q,i)=>({
-      t:q.t, opts:q.opts,
-      dbIdx:i,
+      t:q.t, opts:q.opts, dbIdx:i,
       sh:q.opts.map((o,k)=>({...o,k})).sort(()=>Math.random()-.5),
       ans:null, sel:[], fails:0
     })).sort(()=>Math.random()-.5);
@@ -412,29 +459,25 @@ const QE = {
   },
 
   _restoreSession(d){
-    this.allQ=d.allQ;
+    this.allQ=d.allQ; this.totalOK=d.ok; this.totalAtt=d.att; this.streak=d.str; this.maxStreak=d.mstr; this.failedSet=new Set(d.fails||[]);
     this.queue=d.qIdx.map(i=>this.allQ.find(q=>q.dbIdx===i)).filter(Boolean);
-    this.totalOK=d.ok; this.totalAtt=d.att;
-    this.streak=d.str; this.maxStreak=d.mstr; this.failedSet=new Set(d.fails||[]);
     if(!this.queue.length){
       if(this.failedSet.size>0){
         const fqs=this.allQ.filter(q=>this.failedSet.has(q.dbIdx));
         this.queue=fqs.map(q=>({...q,sh:q.opts.map((o,k)=>({...o,k})).sort(()=>Math.random()-.5),ans:null,sel:[],fails:0}));
         this.failedSet=new Set(); this.streak=0; this.viewingDbIdx=null;
         this._save();
-      }else{
-        this._build(this.currCat);
-      }
+      }else this._build(this.currCat);
     }
   },
 
-  _save(){
+  async _save(){
     if(!this.currCat)return;
-    localStorage.setItem('S_'+this.currCat,JSON.stringify({
+    const data = {
       v:2, allQ:this.allQ, qIdx:this.queue.map(q=>q.dbIdx),
-      ok:this.totalOK, att:this.totalAtt,
-      str:this.streak, mstr:this.maxStreak, fails:[...this.failedSet]
-    }))
+      ok:this.totalOK, att:this.totalAtt, str:this.streak, mstr:this.maxStreak, fails:[...this.failedSet]
+    };
+    await DM.saveSession(this.currCat, data);
   },
 
 
@@ -472,9 +515,9 @@ const QE = {
     if(bar){bar.style.transition='none';bar.style.width='0'}
   },
 
-  reset(){
+  async reset(){
     if(!confirm('¿Reiniciar?'))return;
-    localStorage.removeItem('S_'+this.currCat); this._build(this.currCat); this.render()
+    await DM.rmSession(this.currCat); this._build(this.currCat); this.render()
   },
 
   retryFailed(){
@@ -495,7 +538,7 @@ const QE = {
     const acts=document.getElementById('res-acts'); acts.innerHTML='';
     const mk=(txt,cls,cb,icon)=>{const b=document.createElement('button');b.className='btn '+cls;b.style.cssText='width:100%;padding:13px;margin-bottom:8px';b.innerHTML=(icon?icon+' ':'')+txt;b.addEventListener('click',cb);acts.appendChild(b)};
     if(failed>0)mk('Repasar falladas ('+failed+')','btn-p',()=>this.retryFailed(),'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>');
-    mk('Repetir todo','btn-g',()=>{localStorage.removeItem('S_'+this.currCat);this._build(this.currCat);App.showScreen('screen-quiz');this.render()},'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a10 10 0 1 0 10-10 10.5 10.5 0 0 0-7 2.6L2 8"/><path d="M2 2v6h6"/></svg>');
+    mk('Repetir todo','btn-g',async ()=>{await DM.rmSession(this.currCat);this._build(this.currCat);App.showScreen('screen-quiz');this.render()},'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a10 10 0 1 0 10-10 10.5 10.5 0 0 0-7 2.6L2 8"/><path d="M2 2v6h6"/></svg>');
     mk('Volver al inicio','btn-g',()=>App.goHome(),'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>');
     App.showScreen('screen-result')
   },
@@ -577,10 +620,10 @@ const Ed = {
       const d=document.createElement('div'); d.className='cr'+(this.selCat===n?' sel':'');
       const sp=document.createElement('span'); sp.textContent=n;
       const bw=document.createElement('div'); bw.style.cssText='display:flex;gap:5px';
-      const be=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>','bic',e=>{e.stopPropagation();DM.exportCat(n)});
-      const br=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>','bic',e=>{e.stopPropagation();this.rename(n)});
-      const bd=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>','bic del',e=>{e.stopPropagation();DM.deleteCat(n)});
-      bw.append(be,br,bd); d.append(sp,bw);
+      const b_e=document.createElement('button');b_e.className='bic';b_e.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';b_e.onclick=(e)=>{e.stopPropagation();DM.exportCat(n)};
+      const b_r=document.createElement('button');b_r.className='bic';b_r.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';b_r.onclick=async(e)=>{e.stopPropagation();const nn=prompt('Nuevo:',n);if(nn&&nn!==n&&await DM.renameCat(n,nn)){if(this.selCat===n)this.selCat=nn;this.renderCats()}};
+      const b_d=document.createElement('button');b_d.className='bic del';b_d.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';b_d.onclick=(e)=>{e.stopPropagation();DM.deleteCat(n)};
+      bw.append(b_e,b_r,b_d); d.append(sp,bw);
       d.addEventListener('click',()=>this.selectCat(n)); c.appendChild(d);
       const o=document.createElement('option'); o.value=n; o.textContent=n; t.appendChild(o)
     })
@@ -598,8 +641,8 @@ const Ed = {
       const d=document.createElement('div'); d.className='qr';
       const tx=document.createElement('div'); tx.className='qrt'; tx.innerHTML='<b>'+(i+1)+'.</b> '+q.t;
       const bw=document.createElement('div'); bw.style.cssText='display:flex;gap:5px;flex-shrink:0';
-      const be=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>','bic',()=>this.loadQ(i));
-      const bd=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>','bic del',()=>{if(!confirm('¿Borrar?'))return;DM.db[this.selCat].splice(i,1);DM.save();localStorage.removeItem('S_'+this.selCat);this.renderQs()});
+      const be=document.createElement('button');be.className='bic';be.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';be.onclick=()=>this.loadQ(i);
+      const bd=document.createElement('button');bd.className='bic del';bd.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';bd.onclick=async()=>{if(!confirm('¿Borrar?'))return;DM.db[this.selCat].splice(i,1);await DM.saveCat(this.selCat);await DM.rmSession(this.selCat);this.renderQs()};
       bw.append(be,bd); d.append(tx,bw); c.appendChild(d)
     })
   },
@@ -614,20 +657,19 @@ const Ed = {
     const d=document.createElement('div'); d.className='or';
     const chk=document.createElement('input'); chk.type='checkbox'; chk.className='och'; if(c)chk.checked=true;
     const inp=document.createElement('input'); inp.type='text'; inp.className='inp'; inp.value=v; inp.placeholder='Opción...'; inp.style.margin='0';
-    const del=b('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>','bic del',()=>d.remove());
+    const del=document.createElement('button');del.className='bic del';del.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';del.onclick=()=>d.remove();
     d.append(chk,inp,del); document.getElementById('q-opts-c').appendChild(d)
   },
   openForm(){ if(!this.selCat){alert('Selecciona categoría');return} this.editIdx=null; document.getElementById('q-text').value=''; document.getElementById('q-opts-c').innerHTML=''; this.addOpt();this.addOpt(); document.getElementById('form-card').classList.add('open'); document.getElementById('btn-open-form').style.display='none' },
   loadQ(i){ this.editIdx=i; const q=DM.db[this.selCat][i]; document.getElementById('q-text').value=q.t; document.getElementById('q-opts-c').innerHTML=''; q.opts.forEach(o=>this.addOpt(o.t,o.c)); document.getElementById('form-card').classList.add('open'); document.getElementById('btn-open-form').style.display='none' },
-  saveQ(){
+  async saveQ(){
     if(!this.selCat)return;
     const t=document.getElementById('q-text').value.trim(); const opts=[];
     document.querySelectorAll('#q-opts-c .or').forEach(row=>{const tx=row.querySelector('input[type=text]').value.trim();const ck=row.querySelector('input[type=checkbox]').checked;if(tx)opts.push({t:tx,c:ck})});
     if(!t||opts.length<2){alert('Necesitas enunciado y ≥2 opciones');return}
     const q={t,opts};
-    if(this.editIdx!==null)DM.db[this.selCat][this.editIdx]=q;
-    else DM.db[this.selCat].push(q);
-    DM.save(); localStorage.removeItem('S_'+this.selCat);
+    if(this.editIdx!==null)DM.db[this.selCat][this.editIdx]=q; else DM.db[this.selCat].push(q);
+    await DM.saveCat(this.selCat); await DM.rmSession(this.selCat);
     this.cancelEdit(); this.renderQs()
   },
   cancelEdit(){ this.editIdx=null; document.getElementById('form-card').classList.remove('open'); document.getElementById('btn-open-form').style.display='' }
@@ -637,19 +679,8 @@ const Ed = {
 function b(str,cls,cb){ const el=document.createElement('button'); el.className=cls; el.innerHTML=str; el.addEventListener('click',cb); return el }
 
 /* ─── APP ───────────────────────────────────────── */
-const App = {
-  init(){
-    DM.init(); this._bind(); this.goHome()
-  },
-  _bind(){
-    document.querySelectorAll('.theme-toggle').forEach(btn => btn.addEventListener('click', () => {
-      const curr = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-      const nxt = curr === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', nxt);
-      localStorage.setItem('DB_QUIZ_THEME', nxt);
-    }));
+const App = { init(){
     document.getElementById('btn-manage').addEventListener('click',()=>{App.showScreen('screen-editor');Ed.switchTab('manual')});
-    document.getElementById('btn-nuke').addEventListener('click',()=>DM.nuke());
     document.getElementById('btn-exit').addEventListener('click',()=>App.goHome());
     document.getElementById('btn-reset').addEventListener('click',()=>QE.reset());
     document.getElementById('btn-back').addEventListener('click',()=>App.goHome());
@@ -664,7 +695,7 @@ const App = {
     document.getElementById('import-target').addEventListener('change',()=>{const v=document.getElementById('import-target').value;document.getElementById('bulk-in').placeholder=v==='__AUTO__'?'JSON completo [{cat,data}...]':'Array preguntas [...]'});
     document.getElementById('uzn').addEventListener('click',()=>document.getElementById('file-up').click());
     document.getElementById('file-up').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>document.getElementById('bulk-in').value=ev.target.result;r.readAsText(f)});
-    document.getElementById('btn-import').addEventListener('click',()=>{const t=document.getElementById('import-target').value;const v=document.getElementById('bulk-in').value.trim();if(v&&DM.importJSON(t,v)){alert('Importado');Ed.renderCats()}});
+    document.getElementById('btn-import').addEventListener('click',async()=>{const t=document.getElementById('import-target').value;const v=document.getElementById('bulk-in').value.trim();if(v&&await DM.importJSON(t,v)){alert('Importado');Ed.renderCats()}});
     // keyboard
     document.addEventListener('keydown',e=>{
       if(e.target.matches('input,textarea,select'))return;
@@ -672,7 +703,41 @@ const App = {
       const num=parseInt(e.key);
       if(num>=1&&num<=9&&!q.ans){const i=num-1;if(i<q.sh.length){const x=q.sel.indexOf(i);if(x>-1)q.sel.splice(x,1);else q.sel.push(i);QE.render()}}
       if((e.key==='Enter'||e.key===' ')&&!document.getElementById('btn-action').disabled){e.preventDefault();document.getElementById('btn-action').click()}
-    })
+    });
+    // auth
+    document.getElementById('btn-login').addEventListener('click',async()=>{
+      const em=document.getElementById('log-em').value.trim();
+      const pw=document.getElementById('log-pw').value;
+      const errEl=document.getElementById('log-err');
+      errEl.style.display='none';
+      try{ await signInWithEmailAndPassword(auth,em,pw) }
+      catch(e){ errEl.textContent=e.message; errEl.style.display='block' }
+    });
+    document.getElementById('btn-register').addEventListener('click',async()=>{
+      const em=document.getElementById('log-em').value.trim();
+      const pw=document.getElementById('log-pw').value;
+      const errEl=document.getElementById('log-err');
+      errEl.style.display='none';
+      try{ await createUserWithEmailAndPassword(auth,em,pw) }
+      catch(e){ errEl.textContent=e.message; errEl.style.display='block' }
+    });
+    document.getElementById('btn-logout').addEventListener('click',async()=>{
+      await signOut(auth); DM.db={}; DM.sessions={}; DM.uid=null;
+    });
+    App.showScreen('screen-login');
+    const ADMIN_UID='Mxji9YlIvcRfG0keCoEGbU1ZhMb2';
+    onAuthStateChanged(auth,async user=>{
+      if(user){
+        DM.uid=user.uid;
+        document.getElementById('user-em-txt').textContent=user.email;
+        document.getElementById('btn-manage').style.display=user.uid===ADMIN_UID?'':'none';
+        await DM.loadData();
+        await DM.loadSessions();
+        App.goHome();
+      } else {
+        App.showScreen('screen-login');
+      }
+    });
   },
   goHome(){
     this.showScreen('screen-home');
@@ -680,9 +745,9 @@ const App = {
     const cats=DM.cats();
     if(!cats.length){c.innerHTML='<div class="es"><span class="ei"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--dim);margin-bottom:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span><br>Sin categorías.<br>Pulsa <b>Gestionar</b> para añadir preguntas.</div>';return}
     cats.forEach(n=>{
-      const s=localStorage.getItem('S_'+n);
+      const d=DM.sessions[n];
       let cl='sg',tx='Sin empezar';
-      if(s){try{const d=JSON.parse(s);if(d.v===2&&d.qIdx){if(d.qIdx.length===0){if(d.fails&&d.fails.length>0){cl='sy';tx='Repaso pte. ('+d.fails.length+')'}else{cl='sv';tx='Completado'}}else if(d.ok>0||d.att>0){cl='sy';tx='En proceso ('+d.qIdx.length+' rest.)'}}}catch(e){}}
+      if(d&&d.v===2&&d.qIdx){if(d.qIdx.length===0){if(d.fails&&d.fails.length>0){cl='sy';tx='Repaso pte. ('+d.fails.length+')'}else{cl='sv';tx='Completado'}}else if(d.ok>0||d.att>0){cl='sy';tx='En proceso ('+d.qIdx.length+' rest.)'}}
       const div=document.createElement('div'); div.className='cc';
       div.innerHTML='<div class="cn">'+n+'</div><div class="cb '+cl+'"><span class="dot"></span>'+tx+'</div>';
       div.addEventListener('click',()=>QE.start(n)); c.appendChild(div)
