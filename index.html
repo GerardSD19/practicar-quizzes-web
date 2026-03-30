@@ -729,7 +729,9 @@ const App = { init(){
       if(user){
         DM.uid=user.uid;
         document.getElementById('user-em-txt').textContent=user.email;
-        const isAdmin=(await getDoc(doc(fdb,'admins',user.uid))).exists();
+        let isAdmin=false;
+        try{ isAdmin=(await getDoc(doc(fdb,'admins',user.uid))).exists() }catch(e){}
+        console.log('UID:',user.uid,'isAdmin:',isAdmin);
         document.getElementById('btn-manage').style.display=isAdmin?'':'none';
         await DM.loadData();
         await DM.loadSessions();
