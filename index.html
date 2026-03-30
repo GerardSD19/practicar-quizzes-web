@@ -378,7 +378,7 @@ textarea.inp{resize:vertical;min-height:80px}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, doc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 'use strict';
 
 /* ─── FIREBASE ──────────────────────────────────── */
@@ -725,12 +725,12 @@ const App = { init(){
       await signOut(auth); DM.db={}; DM.sessions={}; DM.uid=null;
     });
     App.showScreen('screen-login');
-    const ADMIN_UID='Mxji9YlIvcRfG0keCoEGbU1ZhMb2';
     onAuthStateChanged(auth,async user=>{
       if(user){
         DM.uid=user.uid;
         document.getElementById('user-em-txt').textContent=user.email;
-        document.getElementById('btn-manage').style.display=user.uid===ADMIN_UID?'':'none';
+        const isAdmin=(await getDoc(doc(fdb,'admins',user.uid))).exists();
+        document.getElementById('btn-manage').style.display=isAdmin?'':'none';
         await DM.loadData();
         await DM.loadSessions();
         App.goHome();
