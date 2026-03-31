@@ -31,7 +31,7 @@
   --r: 12px;
   --rs: 8px;
   --tr: .2s ease;
-  --sw: 268px;
+  --sw: 350px;
 }
 
 [data-theme="light"] {
@@ -209,6 +209,25 @@ textarea.inp{resize:vertical;min-height:80px}
   .sg3{grid-template-columns:1fr 1fr}
   .rw{padding:30px 16px}
 }
+
+.fld{border-left:4px solid var(--warn);background:rgba(251, 191, 36, 0.05)}
+.fld:hover{background:rgba(251, 191, 36, 0.08)}
+.fld-i{margin-bottom:12px;color:var(--warn)}
+.path-bar{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-bottom:24px;font-size:.85rem;font-weight:600;color:var(--text-dim)}
+.path-item{cursor:pointer;transition:var(--tr)}
+.path-item:hover{color:var(--text)}
+.path-sep{opacity:.3}
+
+/* New Nav Styles */
+.back-nav{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin-bottom:24px;cursor:pointer;color:var(--text-dim);transition:var(--tr);width:fit-content}
+.back-nav:hover{color:var(--text)}
+.back-nav svg{transition:transform .2s ease}
+.back-nav:hover svg{transform:translateX(-3px)}
+.fld-tit{font-size:1.2rem;font-weight:700;color:var(--text);letter-spacing:-.02em}
+
+.ed-fld{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:12px;overflow:hidden}
+.ed-fld-h{padding:10px 12px;background:var(--surface2);display:flex;align-items:center;gap:8px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim)}
+.ed-fld-c{padding:4px}
 </style>
 <script>!function(){try{var t=localStorage.getItem("DB_QUIZ_THEME")||"dark";document.documentElement.setAttribute("data-theme",t)}catch(e){}}()</script>
 </head>
@@ -326,12 +345,20 @@ textarea.inp{resize:vertical;min-height:80px}
 <div class="el">
   <div class="esb">
     <div class="pc">
-      <div class="ptit">Categorías</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="new-cat" class="inp" placeholder="Nueva categoría..." style="margin:0;flex:1">
-        <button id="btn-add-cat" class="btn btn-p btn-sm" style="padding:10px 16px">+</button>
+      <div class="ptit">Gestión</div>
+      <button id="btn-new-fld" class="btn btn-g btn-sm" style="width:100%;margin-bottom:16px;border-style:dashed">+ Nueva Carpeta</button>
+      
+      <div class="ptit">Nueva Categoría</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        <input type="text" id="new-cat" class="inp" placeholder="Nombre..." style="margin:0">
+        <div style="display:flex;gap:8px">
+          <select id="new-cat-fld" class="inp" style="margin:0;flex:1"></select>
+          <button id="btn-add-cat" class="btn btn-p btn-sm" style="padding:10px 16px">+</button>
+        </div>
       </div>
-      <div id="cat-list" style="max-height:320px;overflow-y:auto"></div>
+      
+      <div class="ptit">Explorador</div>
+      <div id="cat-list" style="max-height:500px;overflow-y:auto"></div>
     </div>
   </div>
   <div class="em">
@@ -396,11 +423,15 @@ const fdb = getFirestore(fbApp);
 
 /* ─── DATA ─────────────────────────────────────── */
 const DM = {
-  db:{}, sessions:{}, uid:null,
+  db:{}, sessions:{}, catFolder:{}, uid:null,
   async loadData(){
-    this.db={};
+    this.db={}; this.catFolder={};
     const snap=await getDocs(collection(fdb,'categories'));
-    snap.forEach(d=>{ this.db[d.id]=d.data().questions||[] });
+    snap.forEach(d=>{ 
+      const data=d.data();
+      this.db[d.id]=data.questions||[];
+      this.catFolder[d.id]=data.folder||null;
+    });
   },
   async loadSessions(){
     this.sessions={};
@@ -408,26 +439,28 @@ const DM = {
     const snap=await getDocs(collection(fdb,'users',this.uid,'sessions'));
     snap.forEach(d=>{ this.sessions[d.id]=d.data() });
   },
-  async createCat(n){ if(!n||this.db[n])return; this.db[n]=[]; await this.saveCat(n) },
+  async createCat(n, f=null){ if(!n||this.db[n])return; this.db[n]=[]; this.catFolder[n]=f; await this.saveCat(n) },
   async renameCat(o,n){
     if(!n||this.db[n])return false;
     this.db[n]=this.db[o]; delete this.db[o];
+    const f=this.catFolder[o]; this.catFolder[n]=f; delete this.catFolder[o];
     const sess=this.sessions[o];
     if(sess){this.sessions[n]=sess;delete this.sessions[o];await setDoc(doc(fdb,'users',this.uid,'sessions',n),sess);await deleteDoc(doc(fdb,'users',this.uid,'sessions',o))}
-    await setDoc(doc(fdb,'categories',n),{questions:this.db[n]});
+    await setDoc(doc(fdb,'categories',n),{questions:this.db[n], folder:f});
     await deleteDoc(doc(fdb,'categories',o));
     return true
   },
   exportCat(n){ const bl=new Blob([JSON.stringify(this.db[n]||[],null,2)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=n+'.txt'; a.click() },
-  async deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; await deleteDoc(doc(fdb,'categories',n)); await this.rmSession(n); Ed.renderCats() },
+  async deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; delete this.catFolder[n]; await deleteDoc(doc(fdb,'categories',n)); await this.rmSession(n); Ed.renderCats() },
+  async setCatFolder(n,f){ if(!this.db[n])return; this.catFolder[n]=f; await this.saveCat(n); Ed.renderCats() },
   async importJSON(t,j){
     try{ const d=JSON.parse(j);
-      if(t==='__AUTO__'&&Array.isArray(d)){for(const x of d){if(x.cat){DM.db[x.cat]=x.data;await DM.saveCat(x.cat)}}}
+      if(t==='__AUTO__'&&Array.isArray(d)){for(const x of d){if(x.cat){DM.db[x.cat]=x.data;if(x.folder)DM.catFolder[x.cat]=x.folder;await DM.saveCat(x.cat)}}}
       else if(DM.db[t]){DM.db[t]=DM.db[t].concat(d);await DM.saveCat(t)}
       return true
     }catch(e){alert('Error JSON');return false}
   },
-  async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[]}) },
+  async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[], folder:this.catFolder[n]||null}) },
   async saveSession(n,data){ this.sessions[n]=data; if(!this.uid)return; await setDoc(doc(fdb,'users',this.uid,'sessions',n),data) },
   async rmSession(n){ delete this.sessions[n]; if(!this.uid)return; await deleteDoc(doc(fdb,'users',this.uid,'sessions',n)) },
   nuke(){ if(!confirm('¿Reset total?'))return; location.reload() },
@@ -611,22 +644,114 @@ const QE = {
 
 /* ─── EDITOR ────────────────────────────────────── */
 const Ed = {
-  selCat:null, editIdx:null,
-  createCat(){ const inp=document.getElementById('new-cat'); const n=inp.value.trim(); if(!n)return; DM.createCat(n); inp.value=''; this.renderCats() },
+  selCat:null, editIdx:null, tempFolders:new Set(),
+  createCat(){ 
+    const inp=document.getElementById('new-cat'); const n=inp.value.trim(); 
+    const sel=document.getElementById('new-cat-fld');
+    const f=sel.value === '__ROOT__' ? null : sel.value;
+    if(!n)return; DM.createCat(n, f); inp.value=''; this.renderCats() 
+  },
+  addFolder(){
+    const nf = prompt('Nombre de la nueva carpeta:');
+    if(nf && nf.trim()){
+      this.tempFolders.add(nf.trim());
+      this.renderCats();
+    }
+  },
+  async deleteFolder(f){
+    if(!confirm('¿Quitar la carpeta "'+f+'"? (Las categorías volverán a la raíz)'))return;
+    const cats = DM.cats().filter(n => DM.catFolder[n] === f);
+    for(const n of cats) await DM.setCatFolder(n, null);
+    this.tempFolders.delete(f);
+    this.renderCats();
+  },
   renderCats(){
     const c=document.getElementById('cat-list'); c.innerHTML='';
     const t=document.getElementById('import-target'); t.innerHTML='<option value="__AUTO__">DETECTAR AUTO</option>';
-    DM.cats().forEach(n=>{
-      const d=document.createElement('div'); d.className='cr'+(this.selCat===n?' sel':'');
-      const sp=document.createElement('span'); sp.textContent=n;
-      const bw=document.createElement('div'); bw.style.cssText='display:flex;gap:5px';
-      const b_e=document.createElement('button');b_e.className='bic';b_e.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';b_e.onclick=(e)=>{e.stopPropagation();DM.exportCat(n)};
-      const b_r=document.createElement('button');b_r.className='bic';b_r.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';b_r.onclick=async(e)=>{e.stopPropagation();const nn=prompt('Nuevo:',n);if(nn&&nn!==n&&await DM.renameCat(n,nn)){if(this.selCat===n)this.selCat=nn;this.renderCats()}};
-      const b_d=document.createElement('button');b_d.className='bic del';b_d.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';b_d.onclick=(e)=>{e.stopPropagation();DM.deleteCat(n)};
-      bw.append(b_e,b_r,b_d); d.append(sp,bw);
-      d.addEventListener('click',()=>this.selectCat(n)); c.appendChild(d);
-      const o=document.createElement('option'); o.value=n; o.textContent=n; t.appendChild(o)
-    })
+    const ncf = document.getElementById('new-cat-fld');
+    const curVal = ncf?.value;
+    ncf.innerHTML = '<option value="__ROOT__">Sin carpeta (Raíz)</option>';
+
+    // Group by folder
+    const groups = {};
+    const allFolders = new Set(this.tempFolders);
+    DM.cats().forEach(n => {
+      const f = DM.catFolder[n] || 'Sin carpeta';
+      if(!groups[f]) groups[f] = [];
+      groups[f].push(n);
+      if(DM.catFolder[n]) allFolders.add(DM.catFolder[n]);
+    });
+
+    const folderOptions = [...allFolders].sort();
+    folderOptions.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f; opt.textContent = f;
+      ncf.appendChild(opt);
+    });
+    if(curVal) ncf.value = curVal;
+
+    // We want to render all folders, even if they're empty
+    const renderList = new Set([...Object.keys(groups), ...allFolders]);
+    
+    [...renderList].sort().forEach(f => {
+      if(f === 'Sin carpeta' && !groups[f]) return; // Skip root header if empty
+
+      const fContainer = document.createElement('div');
+      fContainer.className = 'ed-fld';
+      
+      const h = document.createElement('div');
+      h.className = 'ed-fld-h';
+      h.style.justifyContent = 'space-between';
+      const ht = document.createElement('div');
+      ht.style.display = 'flex'; ht.style.alignItems = 'center'; ht.style.gap = '8px';
+      ht.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> ' + f;
+      h.appendChild(ht);
+
+      if(f !== 'Sin carpeta'){
+        const bd = document.createElement('button'); bd.className = 'bic del'; bd.style.border='none'; bd.style.padding='2px';
+        bd.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        bd.onclick = (e) => { e.stopPropagation(); this.deleteFolder(f); };
+        h.appendChild(bd);
+      }
+      fContainer.appendChild(h);
+
+      const content = document.createElement('div');
+      content.className = 'ed-fld-c';
+      fContainer.appendChild(content);
+
+      if(groups[f]){
+        groups[f].forEach(n => {
+          const d=document.createElement('div'); d.className='cr'+(this.selCat===n?' sel':'');
+          const sp=document.createElement('span'); sp.textContent=n; sp.style.flex='1';
+          const bw=document.createElement('div'); bw.style.cssText='display:flex;gap:5px;align-items:center';
+          
+          const fSel = document.createElement('select'); fSel.className = 'inp'; fSel.style.cssText = 'font-size:.65rem;padding:2px 4px;width:80px;height:24px;margin:0;background:var(--surface2)';
+          fSel.innerHTML = '<option value="__ROOT__">Raíz</option>';
+          folderOptions.forEach(fn => { 
+            const o = document.createElement('option'); o.value = fn; o.textContent = fn;
+            if(DM.catFolder[n] === fn) o.selected = true;
+            fSel.appendChild(o);
+          });
+          fSel.oninput = (e) => { 
+            const nv = e.target.value === '__ROOT__' ? null : e.target.value; 
+            setTimeout(async () => { await DM.setCatFolder(n, nv); }, 50);
+          };
+          fSel.onclick = (e) => e.stopPropagation();
+  
+          const b_e=document.createElement('button');b_e.className='bic';b_e.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';b_e.onclick=(e)=>{e.stopPropagation();DM.exportCat(n)};
+          const b_r=document.createElement('button');b_r.className='bic';b_r.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';b_r.onclick=async(e)=>{e.stopPropagation();const nn=prompt('Nuevo:',n);if(nn&&nn!==n&&await DM.renameCat(n,nn)){if(this.selCat===n)this.selCat=nn;this.renderCats()}};
+          const b_d=document.createElement('button');b_d.className='bic del';b_d.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';b_d.onclick=(e)=>{e.stopPropagation();DM.deleteCat(n)};
+          bw.append(fSel,b_e,b_r,b_d); d.append(sp,bw);
+          d.addEventListener('click',()=>this.selectCat(n)); content.appendChild(d);
+          const o=document.createElement('option'); o.value=n; o.textContent=n; t.appendChild(o)
+        });
+      } else {
+        const em = document.createElement('div'); em.style.cssText = 'padding:14px;color:var(--text-dim);font-size:.75rem;text-align:center;font-style:italic';
+        em.textContent = 'Carpeta vacía';
+        content.appendChild(em);
+      }
+      c.appendChild(fContainer);
+    });
   },
   rename(o){ const n=prompt('Nuevo nombre:',o); if(n&&n!==o&&DM.renameCat(o,n)){if(this.selCat===o)this.selCat=n;this.renderCats()} },
   selectCat(n){ this.selCat=n; document.getElementById('tgt-cat').textContent=n; this.cancelEdit(); this.renderCats(); this.renderQs() },
@@ -685,6 +810,7 @@ const App = { init(){
     document.getElementById('btn-reset').addEventListener('click',()=>QE.reset());
     document.getElementById('btn-back').addEventListener('click',()=>App.goHome());
     document.getElementById('btn-add-cat').addEventListener('click',()=>Ed.createCat());
+    document.getElementById('btn-new-fld').addEventListener('click',()=>Ed.addFolder());
     document.getElementById('new-cat').addEventListener('keydown',e=>{if(e.key==='Enter')Ed.createCat()});
     document.querySelectorAll('.tbn').forEach(btn=>btn.addEventListener('click',()=>Ed.switchTab(btn.dataset.tab)));
     document.getElementById('btn-add-opt').addEventListener('click',()=>Ed.addOpt());
@@ -739,19 +865,51 @@ const App = { init(){
       }
     });
   },
-  goHome(){
+  goHome(path=null){
+    this.activeFolder = path;
     this.showScreen('screen-home');
     const c=document.getElementById('home-list'); c.innerHTML='';
     const cats=DM.cats();
+    
     if(!cats.length){c.innerHTML='<div class="es"><span class="ei"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--dim);margin-bottom:12px"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span><br>Sin categorías.<br>Pulsa <b>Gestionar</b> para añadir preguntas.</div>';return}
-    cats.forEach(n=>{
-      const d=DM.sessions[n];
-      let cl='sg',tx='Sin empezar';
-      if(d&&d.v===2&&d.qIdx){if(d.qIdx.length===0){if(d.fails&&d.fails.length>0){cl='sy';tx='Repaso pte. ('+d.fails.length+')'}else{cl='sv';tx='Completado'}}else if(d.ok>0||d.att>0){cl='sy';tx='En proceso ('+d.qIdx.length+' rest.)'}}
-      const div=document.createElement('div'); div.className='cc';
-      div.innerHTML='<div class="cn">'+n+'</div><div class="cb '+cl+'"><span class="dot"></span>'+tx+'</div>';
-      div.addEventListener('click',()=>QE.start(n)); c.appendChild(div)
-    })
+
+    if(this.activeFolder){
+      const bnav = document.createElement('div'); bnav.className='back-nav';
+      bnav.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg> <span class="fld-tit">'+this.activeFolder+'</span>';
+      bnav.onclick=()=>this.goHome();
+      c.appendChild(bnav);
+    } else {
+      const pb = document.createElement('div'); pb.className='path-bar';
+      pb.innerHTML = '<span style="color:var(--text);opacity:.5">Categorías</span>';
+      c.appendChild(pb);
+    }
+
+    const grid = document.createElement('div'); grid.className='hg';
+    c.appendChild(grid);
+
+    if(!this.activeFolder){
+      // Show folders
+      const folders = new Set();
+      cats.forEach(n => { if(DM.catFolder[n]) folders.add(DM.catFolder[n]) });
+      [...folders].sort().forEach(f => {
+        const div=document.createElement('div'); div.className='cc fld';
+        div.innerHTML='<div class="fld-i"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></div><div class="cn">'+f+'</div><div class="ls">Carpeta</div>';
+        div.onclick=()=>this.goHome(f); grid.appendChild(div);
+      });
+      // Show root cats
+      cats.filter(n => !DM.catFolder[n]).sort().forEach(n => this._renderCatCard(n, grid));
+    } else {
+      // Show cats in folder
+      cats.filter(n => DM.catFolder[n] === this.activeFolder).sort().forEach(n => this._renderCatCard(n, grid));
+    }
+  },
+  _renderCatCard(n, grid){
+    const d=DM.sessions[n];
+    let cl='sg',tx='Sin empezar';
+    if(d&&d.v===2&&d.qIdx){if(d.qIdx.length===0){if(d.fails&&d.fails.length>0){cl='sy';tx='Repaso pte. ('+d.fails.length+')'}else{cl='sv';tx='Completado'}}else if(d.ok>0||d.att>0){cl='sy';tx='En proceso ('+d.qIdx.length+' rest.)'}}
+    const div=document.createElement('div'); div.className='cc';
+    div.innerHTML='<div class="cn">'+n+'</div><div class="cb '+cl+'"><span class="dot"></span>'+tx+'</div>';
+    div.addEventListener('click',()=>QE.start(n)); grid.appendChild(div)
   },
   showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active') }
 };
