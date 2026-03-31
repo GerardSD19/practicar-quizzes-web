@@ -423,15 +423,34 @@ const fdb = getFirestore(fbApp);
 
 /* ─── DATA ─────────────────────────────────────── */
 const DM = {
-  db:{}, sessions:{}, catFolder:{}, uid:null,
+  db:{}, sessions:{}, catFolder:{}, folders:new Set(), uid:null,
   async loadData(){
-    this.db={}; this.catFolder={};
+    this.db={}; this.catFolder={}; this.folders = new Set();
     const snap=await getDocs(collection(fdb,'categories'));
     snap.forEach(d=>{ 
       const data=d.data();
+      if(d.id.startsWith('--')) return; // skip metadata docs
       this.db[d.id]=data.questions||[];
-      this.catFolder[d.id]=data.folder||null;
     });
+    // Load local organization (folders and mapping)
+    try {
+      if(!this.uid) return;
+      const fSnap = await getDoc(doc(fdb,'users',this.uid,'sessions','--folders--'));
+      if(fSnap.exists()){ 
+        const data = fSnap.data();
+        (data.list||[]).forEach(f => this.folders.add(f));
+        this.catFolder = data.mapping || {};
+      }
+    } catch(e) { console.warn("Organization metadata inaccessible:", e); }
+  },
+  async saveFolders(){ 
+    try { 
+      if(!this.uid) return;
+      await setDoc(doc(fdb,'users',this.uid,'sessions','--folders--'), {
+        list:[...this.folders],
+        mapping: this.catFolder
+      });
+    } catch(e) { console.error("Could not save organization:", e); }
   },
   async loadSessions(){
     this.sessions={};
@@ -452,7 +471,7 @@ const DM = {
   },
   exportCat(n){ const bl=new Blob([JSON.stringify(this.db[n]||[],null,2)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=n+'.txt'; a.click() },
   async deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; delete this.catFolder[n]; await deleteDoc(doc(fdb,'categories',n)); await this.rmSession(n); Ed.renderCats() },
-  async setCatFolder(n,f){ if(!this.db[n])return; this.catFolder[n]=f; await this.saveCat(n); Ed.renderCats() },
+  async setCatFolder(n,f){ if(!this.db[n])return; this.catFolder[n]=f; await this.saveFolders(); Ed.renderCats() },
   async importJSON(t,j){
     try{ const d=JSON.parse(j);
       if(t==='__AUTO__'&&Array.isArray(d)){for(const x of d){if(x.cat){DM.db[x.cat]=x.data;if(x.folder)DM.catFolder[x.cat]=x.folder;await DM.saveCat(x.cat)}}}
@@ -460,7 +479,7 @@ const DM = {
       return true
     }catch(e){alert('Error JSON');return false}
   },
-  async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[], folder:this.catFolder[n]||null}) },
+  async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[]}) },
   async saveSession(n,data){ this.sessions[n]=data; if(!this.uid)return; await setDoc(doc(fdb,'users',this.uid,'sessions',n),data) },
   async rmSession(n){ delete this.sessions[n]; if(!this.uid)return; await deleteDoc(doc(fdb,'users',this.uid,'sessions',n)) },
   nuke(){ if(!confirm('¿Reset total?'))return; location.reload() },
@@ -644,17 +663,18 @@ const QE = {
 
 /* ─── EDITOR ────────────────────────────────────── */
 const Ed = {
-  selCat:null, editIdx:null, tempFolders:new Set(),
+  selCat:null, editIdx:null,
   createCat(){ 
     const inp=document.getElementById('new-cat'); const n=inp.value.trim(); 
     const sel=document.getElementById('new-cat-fld');
     const f=sel.value === '__ROOT__' ? null : sel.value;
     if(!n)return; DM.createCat(n, f); inp.value=''; this.renderCats() 
   },
-  addFolder(){
+  async addFolder(){
     const nf = prompt('Nombre de la nueva carpeta:');
     if(nf && nf.trim()){
-      this.tempFolders.add(nf.trim());
+      DM.folders.add(nf.trim());
+      await DM.saveFolders();
       this.renderCats();
     }
   },
@@ -662,7 +682,8 @@ const Ed = {
     if(!confirm('¿Quitar la carpeta "'+f+'"? (Las categorías volverán a la raíz)'))return;
     const cats = DM.cats().filter(n => DM.catFolder[n] === f);
     for(const n of cats) await DM.setCatFolder(n, null);
-    this.tempFolders.delete(f);
+    DM.folders.delete(f);
+    await DM.saveFolders();
     this.renderCats();
   },
   renderCats(){
@@ -674,7 +695,7 @@ const Ed = {
 
     // Group by folder
     const groups = {};
-    const allFolders = new Set(this.tempFolders);
+    const allFolders = new Set(DM.folders);
     DM.cats().forEach(n => {
       const f = DM.catFolder[n] || 'Sin carpeta';
       if(!groups[f]) groups[f] = [];
