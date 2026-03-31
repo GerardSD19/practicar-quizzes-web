@@ -429,28 +429,25 @@ const DM = {
     const snap=await getDocs(collection(fdb,'categories'));
     snap.forEach(d=>{ 
       const data=d.data();
-      if(d.id.startsWith('--')) return; // skip metadata docs
+      if(d.id === '_config_organization') {
+        try {
+          const cfg = JSON.parse(data.questions[0] || '{}');
+          (cfg.list||[]).forEach(f => this.folders.add(f));
+          this.catFolder = cfg.mapping || {};
+        } catch(e) { console.warn("Cfg parse error", e); }
+        return;
+      }
       this.db[d.id]=data.questions||[];
     });
-    // Load local organization (folders and mapping)
-    try {
-      if(!this.uid) return;
-      const fSnap = await getDoc(doc(fdb,'users',this.uid,'sessions','--folders--'));
-      if(fSnap.exists()){ 
-        const data = fSnap.data();
-        (data.list||[]).forEach(f => this.folders.add(f));
-        this.catFolder = data.mapping || {};
-      }
-    } catch(e) { console.warn("Organization metadata inaccessible:", e); }
   },
   async saveFolders(){ 
     try { 
-      if(!this.uid) return;
-      await setDoc(doc(fdb,'users',this.uid,'sessions','--folders--'), {
-        list:[...this.folders],
+      const payload = JSON.stringify({
+        list: [...this.folders],
         mapping: this.catFolder
       });
-    } catch(e) { console.error("Could not save organization:", e); }
+      await setDoc(doc(fdb,'categories','_config_organization'), { questions: [payload] });
+    } catch(e) { console.error("Could not save global organization:", e); }
   },
   async loadSessions(){
     this.sessions={};
