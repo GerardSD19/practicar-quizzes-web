@@ -429,11 +429,11 @@ const DM = {
     const snap=await getDocs(collection(fdb,'categories'));
     snap.forEach(d=>{ 
       const data=d.data();
-      if(d.id === '_config_organization') {
+      if(d.id === 'CarpeteroGlobal' || d.id === '__ORG__' || d.id === '_config_organization') {
         try {
           const cfg = JSON.parse(data.questions[0] || '{}');
           (cfg.list||[]).forEach(f => this.folders.add(f));
-          this.catFolder = cfg.mapping || {};
+          Object.assign(this.catFolder, cfg.mapping || {});
         } catch(e) { console.warn("Cfg parse error", e); }
         return;
       }
@@ -446,8 +446,8 @@ const DM = {
         list: [...this.folders],
         mapping: this.catFolder
       });
-      await setDoc(doc(fdb,'categories','_config_organization'), { questions: [payload] });
-    } catch(e) { console.error("Could not save global organization:", e); }
+      await setDoc(doc(fdb,'categories','CarpeteroGlobal'), { questions: [payload] });
+    } catch(e) { console.error("Could not save global folders:", e); }
   },
   async loadSessions(){
     this.sessions={};
@@ -462,19 +462,36 @@ const DM = {
     const f=this.catFolder[o]; this.catFolder[n]=f; delete this.catFolder[o];
     const sess=this.sessions[o];
     if(sess){this.sessions[n]=sess;delete this.sessions[o];await setDoc(doc(fdb,'users',this.uid,'sessions',n),sess);await deleteDoc(doc(fdb,'users',this.uid,'sessions',o))}
-    await setDoc(doc(fdb,'categories',n),{questions:this.db[n], folder:f});
+    await this.saveCat(n);
     await deleteDoc(doc(fdb,'categories',o));
+    await this.saveFolders();
     return true
   },
   exportCat(n){ const bl=new Blob([JSON.stringify(this.db[n]||[],null,2)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=n+'.txt'; a.click() },
   async deleteCat(n){ if(!confirm('¿Borrar "'+n+'"?'))return; delete this.db[n]; delete this.catFolder[n]; await deleteDoc(doc(fdb,'categories',n)); await this.rmSession(n); Ed.renderCats() },
   async setCatFolder(n,f){ if(!this.db[n])return; this.catFolder[n]=f; await this.saveFolders(); Ed.renderCats() },
   async importJSON(t,j){
-    try{ const d=JSON.parse(j);
-      if(t==='__AUTO__'&&Array.isArray(d)){for(const x of d){if(x.cat){DM.db[x.cat]=x.data;if(x.folder)DM.catFolder[x.cat]=x.folder;await DM.saveCat(x.cat)}}}
-      else if(DM.db[t]){DM.db[t]=DM.db[t].concat(d);await DM.saveCat(t)}
+    try{ 
+      const d=JSON.parse(j);
+      if(t==='__AUTO__'){
+        if(!Array.isArray(d)) throw new Error("Faltan corchetes [ ]");
+        for(const x of d){
+          if(x.cat){
+            DM.db[x.cat]=x.data||[];
+            if(x.folder){ DM.folders.add(x.folder); DM.catFolder[x.cat]=x.folder; }
+            await DM.saveCat(x.cat);
+          }
+        }
+        await DM.saveFolders();
+      } else {
+        if(!DM.db[t]) throw new Error("Categoría no existe");
+        const newQs = Array.isArray(d) ? d : (d.data || []);
+        if(!Array.isArray(newQs)) throw new Error("Formato incorrecto");
+        DM.db[t]=DM.db[t].concat(newQs);
+        await DM.saveCat(t);
+      }
       return true
-    }catch(e){alert('Error JSON');return false}
+    }catch(e){ alert('Error JSON: ' + e.message); return false }
   },
   async saveCat(n){ await setDoc(doc(fdb,'categories',n),{questions:this.db[n]||[]}) },
   async saveSession(n,data){ this.sessions[n]=data; if(!this.uid)return; await setDoc(doc(fdb,'users',this.uid,'sessions',n),data) },
