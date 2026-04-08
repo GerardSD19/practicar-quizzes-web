@@ -1202,7 +1202,7 @@
 
     .ar-user-row {
       display: grid;
-      grid-template-columns: 1.5fr repeat(4, 1fr);
+      grid-template-columns: 1.5fr repeat(6, 1fr);
       align-items: center;
       padding: 12px 20px;
       border-top: 1px solid var(--border);
@@ -1800,11 +1800,26 @@
 
         this.allQ = [];
         d.allQ.forEach(oldQ => {
-          const fresh = freshDb[oldQ.dbIdx];
-          if (!fresh) {
+          let freshIdx = freshDb.findIndex(fq => fq.t === oldQ.t);
+          
+          if (freshIdx === -1) {
+            const candidate = freshDb[oldQ.dbIdx];
+            if (candidate) {
+              const someoneElseHasThis = d.allQ.some(oq => oq !== oldQ && oq.t === candidate.t);
+              if (!someoneElseHasThis) {
+                freshIdx = oldQ.dbIdx;
+              }
+            }
+          }
+
+          if (freshIdx === -1) {
              this.allQ.push(oldQ);
              return;
           }
+
+          const fresh = freshDb[freshIdx];
+          oldQ.dbIdx = freshIdx;
+          
           let newSh;
           if (oldQ.opts.length === fresh.opts.length) {
             newSh = oldQ.sh.map(o => {
@@ -1815,6 +1830,7 @@
             newSh = fresh.opts.map((o, k) => ({ ...o, k })).sort(() => set.rO ? Math.random() - .5 : 0);
             oldQ.sel = [];
           }
+          
           if (oldQ.ans) {
             const nowOk = oldQ.sel.length > 0 && oldQ.sel.every(idx => newSh[idx].c) && oldQ.sel.length === newSh.filter(o => o.c).length;
             const wasOk = oldQ.ans === 'ok';
@@ -2133,7 +2149,7 @@
           const tx = document.createElement('div'); tx.className = 'qrt'; tx.innerHTML = '<b>' + (i + 1) + '.</b> ' + q.t;
           const bw = document.createElement('div'); bw.style.cssText = 'display:flex;gap:5px;flex-shrink:0';
           const be = document.createElement('button'); be.className = 'bic'; be.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'; be.onclick = () => this.loadQ(i);
-          const bd = document.createElement('button'); bd.className = 'bic del'; bd.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'; bd.onclick = async () => { if (!confirm('¿Borrar?')) return; DM.db[this.selCat].splice(i, 1); await DM.saveCat(this.selCat); await DM.rmSession(this.selCat); this.renderQs() };
+          const bd = document.createElement('button'); bd.className = 'bic del'; bd.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'; bd.onclick = async () => { if (!confirm('¿Borrar?')) return; DM.db[this.selCat].splice(i, 1); await DM.saveCat(this.selCat); this.renderQs() };
           bw.append(be, bd); d.append(tx, bw); c.appendChild(d)
         })
       },
@@ -2296,6 +2312,8 @@
           headerRow.innerHTML = `
             <div>Usuario</div>
             <div class="ar-cell">Precisión</div>
+            <div class="ar-cell" style="color:var(--ok)">Aciertos</div>
+            <div class="ar-cell" style="color:var(--warn)">Fallos</div>
             <div class="ar-cell">Intentos</div>
             <div class="ar-cell">Racha Max</div>
             <div class="ar-cell">Estado</div>
@@ -2311,6 +2329,7 @@
 
             const acc = sess.att > 0 ? Math.round((sess.ok || 0) / sess.att * 100) : 0;
             const accClass = acc >= 80 ? 'high' : acc >= 50 ? 'mid' : 'low';
+            const mistakes = sess.att > 0 ? sess.att - (sess.ok || 0) : 0;
 
             let statusBadge;
             if (sess.qIdx && sess.qIdx.length === 0) {
@@ -2329,6 +2348,8 @@
             row.innerHTML = `
               <div class="ar-user-name" title="${email}">${email}</div>
               <div class="ar-cell"><span class="ar-acc ${accClass}">${sess.att > 0 ? acc + '%' : '—'}</span></div>
+              <div class="ar-cell"><span style="color:var(--ok);font-weight:600">${sess.ok || 0}</span></div>
+              <div class="ar-cell"><span style="color:var(--warn);font-weight:600">${mistakes}</span></div>
               <div class="ar-cell">${sess.att || 0}</div>
               <div class="ar-cell">${sess.mstr || 0}</div>
               <div class="ar-cell">${statusBadge}</div>
