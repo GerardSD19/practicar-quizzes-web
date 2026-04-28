@@ -1591,8 +1591,11 @@
               <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer;margin-bottom:6px">
                 <input type="checkbox" id="cat-set-rq"> Aleatorizar el orden de las preguntas
               </label>
-              <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer">
+              <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer;margin-bottom:6px">
                 <input type="checkbox" id="cat-set-ro"> Aleatorizar el orden de las respuestas
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer">
+                <input type="checkbox" id="cat-set-multi"> Permitir multirespuesta
               </label>
             </div>
             <div style="position:relative">
@@ -1652,9 +1655,9 @@
 
     /* ─── DATA ─────────────────────────────────────── */
     const DM = {
-      db: {}, sessions: {}, catFolder: {}, folders: new Set(), uid: null, catSettings: {},
+      db: {}, sessions: {}, catFolder: {}, folders: new Set(), archivedCats: new Set(), uid: null, catSettings: {},
       async loadData() {
-        this.db = {}; this.catFolder = {}; this.folders = new Set(); this.catSettings = {};
+        this.db = {}; this.catFolder = {}; this.folders = new Set(); this.archivedCats = new Set(); this.catSettings = {};
         const snap = await getDocs(collection(fdb, 'categories'));
         const cfgs = {};
         snap.forEach(d => {
@@ -1672,6 +1675,7 @@
             const cfg = JSON.parse(cfgData.questions[0] || '{}');
             (cfg.list || []).forEach(f => this.folders.add(f));
             Object.assign(this.catFolder, cfg.mapping || {});
+            (cfg.archivedCats || []).forEach(n => this.archivedCats.add(n));
           } catch (e) { console.warn("Cfg parse error", e); }
         }
       },
@@ -1679,7 +1683,8 @@
         try {
           const payload = JSON.stringify({
             list: [...this.folders],
-            mapping: this.catFolder
+            mapping: this.catFolder,
+            archivedCats: [...this.archivedCats]
           });
           await setDoc(doc(fdb, 'categories', 'CarpeteroGlobal'), { questions: [payload] });
         } catch (e) { console.error("Could not save global folders:", e); }
@@ -1705,6 +1710,8 @@
       },
       exportCat(n) { const bl = new Blob([JSON.stringify({ data: this.db[n] || [], settings: this.catSettings[n] || {rQ: true, rO: true} }, null, 2)], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = n + '.txt'; a.click() },
       async deleteCat(n) { if (!confirm('¿Borrar "' + n + '"?')) return; delete this.db[n]; delete this.catFolder[n]; delete this.catSettings[n]; await deleteDoc(doc(fdb, 'categories', n)); await this.rmSession(n); await this.saveFolders(); Ed.renderCats() },
+      async archiveCat(n) { this.archivedCats.add(n); await this.saveFolders(); Ed.renderCats() },
+      async unarchiveCat(n) { this.archivedCats.delete(n); await this.saveFolders(); Ed.renderCats() },
       async setCatFolder(n, f) { if (!this.db[n]) return; if (f) this.catFolder[n] = f; else delete this.catFolder[n]; await this.saveFolders(); Ed.renderCats() },
       async importJSON(t, j) {
         try {
@@ -1951,6 +1958,7 @@
       render() {
         const q = this.viewingDbIdx !== null ? this.allQ.find(x => x.dbIdx === this.viewingDbIdx) : this.queue[0];
         if (!q) { if (this.totalAtt > 0) this._showResult(); return }
+        const set = DM.catSettings[this.currCat] || { rQ: true, rO: true, multi: false };
         const total = this.allQ.length;
         const done = total - this.queue.length;
         document.getElementById('qcat').textContent = this.currCat;
@@ -1966,7 +1974,7 @@
           d.innerHTML = '<span class="ol">' + String.fromCharCode(65 + i) + '</span><span>' + o.t + '</span>';
           if (q.ans) { d.classList.add('disabled'); if (o.c) d.classList.add('correct'); else if (q.sel.includes(i)) d.classList.add('incorrect') }
           else if (q.sel.includes(i)) d.classList.add('selected');
-          d.addEventListener('click', () => { if (q.ans) return; if (q.sel.includes(i)) q.sel = []; else q.sel = [i]; this.render() });
+          d.addEventListener('click', () => { if (q.ans) return; if (set.multi) { const x = q.sel.indexOf(i); if (x > -1) q.sel.splice(x, 1); else q.sel.push(i); } else { if (q.sel.includes(i)) q.sel = []; else q.sel = [i]; } this.render() });
           oc.appendChild(d)
         });
         // button
@@ -2067,8 +2075,45 @@
         // We want to render all folders, even if they're empty
         const renderList = new Set([...Object.keys(groups), ...allFolders]);
 
+        const makeCatRow = (n, isArchived) => {
+          const d = document.createElement('div'); d.className = 'cr' + (this.selCat === n ? ' sel' : '');
+          if (isArchived) d.style.opacity = '0.55';
+          const sp = document.createElement('span'); sp.textContent = n; sp.style.flex = '1';
+          const bw = document.createElement('div'); bw.style.cssText = 'display:flex;gap:5px;align-items:center';
+
+          if (isArchived) {
+            const b_u = document.createElement('button'); b_u.className = 'bic'; b_u.title = 'Restaurar';
+            b_u.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-4.5"></path></svg>';
+            b_u.onclick = (e) => { e.stopPropagation(); DM.unarchiveCat(n) };
+            const b_d = document.createElement('button'); b_d.className = 'bic del'; b_d.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'; b_d.onclick = (e) => { e.stopPropagation(); DM.deleteCat(n) };
+            bw.append(b_u, b_d);
+          } else {
+            const fSel = document.createElement('select'); fSel.className = 'inp'; fSel.style.cssText = 'font-size:.65rem;padding:2px 4px;width:80px;height:24px;margin:0;background:var(--surface2)';
+            fSel.innerHTML = '<option value="__ROOT__">Raíz</option>';
+            folderOptions.forEach(fn => {
+              const o = document.createElement('option'); o.value = fn; o.textContent = fn;
+              if (DM.catFolder[n] === fn) o.selected = true;
+              fSel.appendChild(o);
+            });
+            fSel.oninput = (e) => {
+              const nv = e.target.value === '__ROOT__' ? null : e.target.value;
+              setTimeout(async () => { await DM.setCatFolder(n, nv); }, 50);
+            };
+            fSel.onclick = (e) => e.stopPropagation();
+
+            const b_e = document.createElement('button'); b_e.className = 'bic'; b_e.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'; b_e.onclick = (e) => { e.stopPropagation(); DM.exportCat(n) };
+            const b_r = document.createElement('button'); b_r.className = 'bic'; b_r.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'; b_r.onclick = async (e) => { e.stopPropagation(); const nn = prompt('Nuevo:', n); if (nn && nn !== n && await DM.renameCat(n, nn)) { if (this.selCat === n) this.selCat = nn; this.renderCats() } };
+            const b_a = document.createElement('button'); b_a.className = 'bic'; b_a.title = 'Archivar'; b_a.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>'; b_a.onclick = (e) => { e.stopPropagation(); DM.archiveCat(n) };
+            const b_d = document.createElement('button'); b_d.className = 'bic del'; b_d.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'; b_d.onclick = (e) => { e.stopPropagation(); DM.deleteCat(n) };
+            bw.append(fSel, b_e, b_r, b_a, b_d);
+          }
+          d.append(sp, bw);
+          if (!isArchived) d.addEventListener('click', () => this.selectCat(n));
+          return d;
+        };
+
         [...renderList].sort().forEach(f => {
-          if (f === 'Sin carpeta' && !groups[f]) return; // Skip root header if empty
+          if (f === 'Sin carpeta' && !groups[f]) return;
 
           const fContainer = document.createElement('div');
           fContainer.className = 'ed-fld';
@@ -2093,39 +2138,40 @@
           content.className = 'ed-fld-c';
           fContainer.appendChild(content);
 
-          if (groups[f]) {
-            groups[f].forEach(n => {
-              const d = document.createElement('div'); d.className = 'cr' + (this.selCat === n ? ' sel' : '');
-              const sp = document.createElement('span'); sp.textContent = n; sp.style.flex = '1';
-              const bw = document.createElement('div'); bw.style.cssText = 'display:flex;gap:5px;align-items:center';
+          const activeCats = (groups[f] || []).filter(n => !DM.archivedCats.has(n));
+          const archivedInFolder = (groups[f] || []).filter(n => DM.archivedCats.has(n));
 
-              const fSel = document.createElement('select'); fSel.className = 'inp'; fSel.style.cssText = 'font-size:.65rem;padding:2px 4px;width:80px;height:24px;margin:0;background:var(--surface2)';
-              fSel.innerHTML = '<option value="__ROOT__">Raíz</option>';
-              folderOptions.forEach(fn => {
-                const o = document.createElement('option'); o.value = fn; o.textContent = fn;
-                if (DM.catFolder[n] === fn) o.selected = true;
-                fSel.appendChild(o);
-              });
-              fSel.oninput = (e) => {
-                const nv = e.target.value === '__ROOT__' ? null : e.target.value;
-                setTimeout(async () => { await DM.setCatFolder(n, nv); }, 50);
-              };
-              fSel.onclick = (e) => e.stopPropagation();
-
-              const b_e = document.createElement('button'); b_e.className = 'bic'; b_e.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'; b_e.onclick = (e) => { e.stopPropagation(); DM.exportCat(n) };
-              const b_r = document.createElement('button'); b_r.className = 'bic'; b_r.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'; b_r.onclick = async (e) => { e.stopPropagation(); const nn = prompt('Nuevo:', n); if (nn && nn !== n && await DM.renameCat(n, nn)) { if (this.selCat === n) this.selCat = nn; this.renderCats() } };
-              const b_d = document.createElement('button'); b_d.className = 'bic del'; b_d.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'; b_d.onclick = (e) => { e.stopPropagation(); DM.deleteCat(n) };
-              bw.append(fSel, b_e, b_r, b_d); d.append(sp, bw);
-              d.addEventListener('click', () => this.selectCat(n)); content.appendChild(d);
-              const o = document.createElement('option'); o.value = n; o.textContent = n; t.appendChild(o)
+          if (activeCats.length) {
+            activeCats.forEach(n => {
+              const row = makeCatRow(n, false);
+              content.appendChild(row);
+              const o = document.createElement('option'); o.value = n; o.textContent = n; t.appendChild(o);
             });
-          } else {
+          } else if (!archivedInFolder.length) {
             const em = document.createElement('div'); em.style.cssText = 'padding:14px;color:var(--text-dim);font-size:.75rem;text-align:center;font-style:italic';
             em.textContent = 'Carpeta vacía';
             content.appendChild(em);
           }
+
+          if (archivedInFolder.length) {
+            const aSep = document.createElement('div'); aSep.style.cssText = 'margin:6px 8px 2px;font-size:.65rem;color:var(--text-dim);font-style:italic';
+            aSep.textContent = 'Archivados';
+            content.appendChild(aSep);
+            archivedInFolder.forEach(n => content.appendChild(makeCatRow(n, true)));
+          }
+
           c.appendChild(fContainer);
         });
+
+        // Archived cats not in any folder rendered group
+        const archivedRoot = [...DM.archivedCats].filter(n => !DM.catFolder[n] && DM.db[n] !== undefined);
+        if (archivedRoot.length) {
+          const sep = document.createElement('div');
+          sep.style.cssText = 'margin:16px 0 6px;font-size:.7rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em';
+          sep.textContent = 'Archivados';
+          c.appendChild(sep);
+          archivedRoot.forEach(n => c.appendChild(makeCatRow(n, true)));
+        }
       },
       rename(o) { const n = prompt('Nuevo nombre:', o); if (n && n !== o && DM.renameCat(o, n)) { if (this.selCat === o) {this.selCat = n; document.getElementById('tgt-cat').textContent = n;} this.renderCats() } },
       selectCat(n) { this.selCat = n; document.getElementById('tgt-cat').textContent = n; this.cancelEdit(); this.renderCats(); this.renderQs(); this.renderCatSettings() },
@@ -2133,9 +2179,10 @@
         const s = document.getElementById('cat-settings');
         if (!this.selCat) { s.style.display = 'none'; return }
         s.style.display = 'block';
-        const st = DM.catSettings[this.selCat] || { rQ: true, rO: true };
+        const st = DM.catSettings[this.selCat] || { rQ: true, rO: true, multi: false };
         document.getElementById('cat-set-rq').checked = st.rQ;
         document.getElementById('cat-set-ro').checked = st.rO;
+        document.getElementById('cat-set-multi').checked = st.multi || false;
       },
       renderQs() {
         const c = document.getElementById('q-list'); c.innerHTML = '';
@@ -2382,10 +2429,11 @@
         document.getElementById('btn-cancel').addEventListener('click', () => Ed.cancelEdit());
         document.getElementById('btn-open-form').addEventListener('click', () => Ed.openForm());
         document.getElementById('search-q').addEventListener('input', () => Ed.renderQs());
-        ['rq', 'ro'].forEach(t => document.getElementById('cat-set-' + t).addEventListener('change', async (e) => {
+        ['rq', 'ro', 'multi'].forEach(t => document.getElementById('cat-set-' + t).addEventListener('change', async (e) => {
           if (!Ed.selCat) return;
-          if (!DM.catSettings[Ed.selCat]) DM.catSettings[Ed.selCat] = { rQ: true, rO: true };
-          DM.catSettings[Ed.selCat][t === 'rq' ? 'rQ' : 'rO'] = e.target.checked;
+          if (!DM.catSettings[Ed.selCat]) DM.catSettings[Ed.selCat] = { rQ: true, rO: true, multi: false };
+          const key = t === 'rq' ? 'rQ' : t === 'ro' ? 'rO' : 'multi';
+          DM.catSettings[Ed.selCat][key] = e.target.checked;
           await DM.saveCat(Ed.selCat);
         }));
         document.getElementById('import-target').addEventListener('change', () => { const v = document.getElementById('import-target').value; document.getElementById('bulk-in').placeholder = v === '__AUTO__' ? 'JSON completo [{cat,data}...]' : 'Array preguntas [...]' });
@@ -2464,19 +2512,19 @@
         c.appendChild(grid);
 
         if (!this.activeFolder) {
-          // Show folders
+          // Show folders (excluding archived)
           const folders = new Set();
-          cats.forEach(n => { if (DM.catFolder[n]) folders.add(DM.catFolder[n]) });
+          cats.forEach(n => { if (DM.catFolder[n] && !DM.archivedCats.has(n)) folders.add(DM.catFolder[n]) });
           [...folders].sort().forEach(f => {
             const div = document.createElement('div'); div.className = 'cc fld';
             div.innerHTML = '<div class="fld-i"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></div><div class="cn">' + f + '</div><div class="ls">Carpeta</div>';
             div.onclick = () => this.goHome(f); grid.appendChild(div);
           });
-          // Show root cats
-          cats.filter(n => !DM.catFolder[n]).sort().forEach(n => this._renderCatCard(n, grid));
+          // Show root cats (not in any folder, not archived)
+          cats.filter(n => !DM.catFolder[n] && !DM.archivedCats.has(n)).sort().forEach(n => this._renderCatCard(n, grid));
         } else {
-          // Show cats in folder
-          cats.filter(n => DM.catFolder[n] === this.activeFolder).sort().forEach(n => this._renderCatCard(n, grid));
+          // Show cats in folder (not archived)
+          cats.filter(n => DM.catFolder[n] === this.activeFolder && !DM.archivedCats.has(n)).sort().forEach(n => this._renderCatCard(n, grid));
         }
       },
       _renderCatCard(n, grid) {
